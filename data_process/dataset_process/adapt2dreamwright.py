@@ -30,7 +30,7 @@ from dreamwright_gemini_client import get_extension_for_mime_type
 google_api_key = os.environ.get("GOOGLE_API_KEY")
 char_generator = CharacterGenerator(api_key=google_api_key)
 loc_generator = LocationGenerator(api_key=google_api_key)
-img_generator = ImageGenerator(api_key=google_api_key)
+img_generator = ImageGenerator()
 
 def map_genre(vistory_type: str) -> str:
     """
