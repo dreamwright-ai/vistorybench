@@ -99,7 +99,7 @@ def parse_camera_design(camera_text: str) -> dict:
     elif "medium" in camera_lower:
         shot_type = "medium"
     elif "full" in camera_lower:
-        shot_type = "full"
+        shot_type = "wide"
 
     # Determine angle
     angle = "eye_level"  # default
