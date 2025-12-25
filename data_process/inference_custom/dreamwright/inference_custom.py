@@ -21,7 +21,9 @@ from typing import Tuple, Dict, Any, Optional
 
 
 # DreamWright repository path (can be overridden via env var or CLI arg)
-DREAMWRIGHT_PATH = os.environ.get('DREAMWRIGHT_PATH', '/Users/kevinpek/github/dreamwright-v2')
+# Default to the submodule in the current directory if not set
+DEFAULT_DREAMWRIGHT_PATH = os.environ.get('DREAMWRIGHT_PATH', os.path.abspath('dreamwright-v2'))
+DREAMWRIGHT_PATH = DEFAULT_DREAMWRIGHT_PATH
 
 # Required environment variables for DreamWright image generation
 REQUIRED_ENV_VARS = ['GOOGLE_API_KEY']
@@ -38,19 +40,22 @@ def check_environment() -> Tuple[bool, list]:
     return len(missing) == 0, missing
 
 
-def run_dreamwright_command(cmd: list, cwd: str = DREAMWRIGHT_PATH,
+def run_dreamwright_command(cmd: list, cwd: str = None,
                              timeout: int = 300) -> Tuple[bool, str]:
     """
     Run a DreamWright CLI command.
 
     Args:
         cmd: Command list (without 'uv run')
-        cwd: Working directory
+        cwd: Working directory (defaults to global DREAMWRIGHT_PATH)
         timeout: Timeout in seconds
 
     Returns:
         Tuple of (success, output/error message)
     """
+    if cwd is None:
+        cwd = DREAMWRIGHT_PATH
+
     full_cmd = ["uv", "run"] + cmd
 
     try:
@@ -228,7 +233,7 @@ def run_inference(manifest: dict, output_base_path: str, language: str,
         # Create output directory for this story
         output_dir = os.path.join(
             output_base_path, "dreamwright", "base", language,
-            timestamp, "shots", story_id
+            timestamp, story_id
         )
         os.makedirs(output_dir, exist_ok=True)
 
@@ -241,36 +246,38 @@ def run_inference(manifest: dict, output_base_path: str, language: str,
         for panel_idx, panel in enumerate(panels):
             panel_id = panel["id"]
 
-            # Check if panel image already exists in DreamWright
-            dw_image_path = os.path.join(
-                DREAMWRIGHT_PATH, "projects", project_id,
-                panel.get("image_path", f"assets/panels/ch1/s1_p{panel_idx + 1}.jpg")
-            )
-
-            if skip_existing and os.path.exists(dw_image_path):
-                print(f"    Panel {panel_id} already exists, skipping generation")
-            else:
-                # Generate the panel
-                if not generate_panel(project_id, panel_id, style=style):
-                    story_results["panels_failed"] += 1
-                    continue
-
-            # Copy to benchmark output format
-            # DreamWright uses: assets/panels/ch1/s1_p{N}.jpg
-            # We need to find the actual file
+            # Define where we expect the image to be (or where it might be)
+            # DreamWright naming conventions can vary slightly
             possible_paths = [
-                dw_image_path,
+                os.path.join(DREAMWRIGHT_PATH, "projects", project_id,
+                            panel.get("image_path", f"assets/panels/ch1/s1_p{panel_idx + 1}.jpg")),
                 os.path.join(DREAMWRIGHT_PATH, "projects", project_id,
                             "assets", "panels", "ch1", f"s1_p{panel_idx + 1}.jpg"),
                 os.path.join(DREAMWRIGHT_PATH, "projects", project_id,
                             "assets", "panels", "chapter-1", "scene-1", f"panel-{panel_idx + 1}.jpg"),
             ]
 
+            # Find existing image
             src_path = None
             for path in possible_paths:
                 if os.path.exists(path):
                     src_path = path
                     break
+
+            if skip_existing and src_path:
+                print(f"    Panel {panel_id} already exists at {os.path.basename(src_path)}, skipping generation")
+            else:
+                # Generate the panel
+                if not generate_panel(project_id, panel_id, style=style):
+                    story_results["panels_failed"] += 1
+                    continue
+                
+                # Re-check paths after generation
+                src_path = None
+                for path in possible_paths:
+                    if os.path.exists(path):
+                        src_path = path
+                        break
 
             if src_path:
                 dst_path = os.path.join(output_dir, f"{panel_idx:02d}.jpg")
@@ -308,7 +315,7 @@ def main():
     parser.add_argument('--data_path', type=str, default=None,
                         help='Path to data directory (default: auto-detect)')
     parser.add_argument('--dreamwright_path', type=str,
-                        default=os.environ.get('DREAMWRIGHT_PATH', '/Users/kevinpek/github/dreamwright-v2'),
+                        default=DEFAULT_DREAMWRIGHT_PATH,
                         help='Path to DreamWright repository (or set DREAMWRIGHT_PATH env var)')
 
     args = parser.parse_args()
@@ -333,7 +340,7 @@ def main():
     else:
         # Auto-detect from script location
         script_dir = Path(__file__).resolve().parent
-        data_path = script_dir.parent.parent.parent / "data"
+        data_path = script_dir.parent.parent.parent / "dreamwright-v2" / "projects"
 
     # Load manifest
     manifest_path = os.path.join(

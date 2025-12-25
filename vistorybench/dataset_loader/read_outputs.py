@@ -75,7 +75,10 @@ def _collect_story_images(story_dir: str,
             fp = os.path.join(shot_base, f)
             if _is_valid_image(fp):
                 # some business require suffix filtering
-                shot_paths[int(f.split('_')[-1].split('.')[0])] = fp
+                try:
+                    shot_paths[int(f.split('_')[-1].split('.')[0])] = fp
+                except ValueError:
+                    continue
 
         # chars
         if char_base:
@@ -158,7 +161,7 @@ def load_outputs(
                         ts_dir = os.path.join(mode_dir, ts)
                         if not os.path.isdir(ts_dir):
                             continue
-                        story_ids = natsorted([d for d in os.listdir(ts_dir) if os.path.isdir(os.path.join(ts_dir, d))], key=lambda x: int(x))
+                        story_ids = natsorted([d for d in os.listdir(ts_dir) if os.path.isdir(os.path.join(ts_dir, d)) and d.isdigit()], key=lambda x: int(x))
                         for sid in story_ids:
                             story_dir = os.path.join(ts_dir, sid)
                             shot_imgs, char_imgs = _collect_story_images(story_dir, return_latest)
@@ -180,7 +183,7 @@ def load_outputs(
                         ts_dir = os.path.join(lang_dir, ts)
                         if not os.path.isdir(ts_dir):
                             continue
-                        story_ids = natsorted([d for d in os.listdir(ts_dir) if os.path.isdir(os.path.join(ts_dir, d))], key=lambda x: int(x))
+                        story_ids = natsorted([d for d in os.listdir(ts_dir) if os.path.isdir(os.path.join(ts_dir, d)) and d.isdigit()], key=lambda x: int(x))
                         for sid in story_ids:
                             story_dir = os.path.join(ts_dir, sid)
                             shot_imgs, char_imgs = _collect_story_images(story_dir, return_latest)
