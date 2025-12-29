@@ -1,3 +1,7 @@
 [submodule "vistorybench/bench/content/AdaFace"]
 	path = vistorybench/bench/content/AdaFace
 	url = https://github.com/mk-minchul/AdaFace
+
+[submodule "dreamwright-v2"]
+	path = dreamwright-v2
+	url = git@github.com:dreamwright-ai/dreamwright-v2.git
