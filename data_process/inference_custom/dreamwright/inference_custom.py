@@ -250,7 +250,7 @@ def run_inference(manifest: dict, output_base_path: str, language: str,
             # DreamWright naming conventions can vary slightly
             possible_paths = [
                 os.path.join(DREAMWRIGHT_PATH, "projects", project_id,
-                            panel.get("image_path", f"assets/panels/ch1/s1_p{panel_idx + 1}.jpg")),
+                            panel.get("image_path") or f"assets/panels/ch1/s1_p{panel_idx + 1}.jpg"),
                 os.path.join(DREAMWRIGHT_PATH, "projects", project_id,
                             "assets", "panels", "ch1", f"s1_p{panel_idx + 1}.jpg"),
                 os.path.join(DREAMWRIGHT_PATH, "projects", project_id,
