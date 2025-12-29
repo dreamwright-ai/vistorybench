@@ -156,30 +156,40 @@ async def convert_story_to_project(story_id: str, story_data: dict, continuity: 
                 reference_image_path = img_path
         
         if reference_image_path:
-            print(f"  - Generating assets for character: {char_key}...")
-            try:
-                sheet_data, sheet_info = await char_generator.generate_character_sheet(
-                    character=character_model, style=story_data.get("type", ""), reference_image=Path(reference_image_path))
-                
-                char_asset_dir = assets_abs_path / "characters" / char_id
-                char_asset_dir.mkdir(parents=True, exist_ok=True)
-                
-                sheet_ext = get_extension_for_mime_type(sheet_info.get("response", {}).get("output", {}).get("mime_type"))
-                sheet_filename = f"sheet_default{sheet_ext}"
-                sheet_abs_path = char_asset_dir / sheet_filename
-                sheet_abs_path.write_bytes(sheet_data)
-                character_model.assets.bible_sheet = f"assets/characters/{char_id}/{sheet_filename}"
-                character_model.assets.sheet = character_model.assets.bible_sheet
+            char_asset_dir = assets_abs_path / "characters" / char_id
+            char_asset_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Check for existing assets to reuse
+            existing_sheet = next(char_asset_dir.glob("sheet_default.*"), None)
+            existing_portrait = next(char_asset_dir.glob("portrait.*"), None)
 
-                portrait_data, portrait_info = await char_generator.generate_portrait(
-                    character=character_model, style=story_data.get("type", ""), reference_image=sheet_abs_path)
-                
-                portrait_ext = get_extension_for_mime_type(portrait_info.get("response", {}).get("output", {}).get("mime_type"))
-                portrait_filename = f"portrait{portrait_ext}"
-                (char_asset_dir / portrait_filename).write_bytes(portrait_data)
-                character_model.assets.portrait = f"assets/characters/{char_id}/{portrait_filename}"
-            except Exception as e:
-                print(f"    ...Error generating assets for character {char_key}: {e}")
+            if existing_sheet and existing_portrait:
+                print(f"  - Reusing existing assets for character: {char_key}")
+                character_model.assets.bible_sheet = f"assets/characters/{char_id}/{existing_sheet.name}"
+                character_model.assets.sheet = character_model.assets.bible_sheet
+                character_model.assets.portrait = f"assets/characters/{char_id}/{existing_portrait.name}"
+            else:
+                print(f"  - Generating assets for character: {char_key}...")
+                try:
+                    sheet_data, sheet_info = await char_generator.generate_character_sheet(
+                        character=character_model, style=story_data.get("type", ""), reference_image=Path(reference_image_path))
+                    
+                    sheet_ext = get_extension_for_mime_type(sheet_info.get("response", {}).get("output", {}).get("mime_type"))
+                    sheet_filename = f"sheet_default{sheet_ext}"
+                    sheet_abs_path = char_asset_dir / sheet_filename
+                    sheet_abs_path.write_bytes(sheet_data)
+                    character_model.assets.bible_sheet = f"assets/characters/{char_id}/{sheet_filename}"
+                    character_model.assets.sheet = character_model.assets.bible_sheet
+
+                    portrait_data, portrait_info = await char_generator.generate_portrait(
+                        character=character_model, style=story_data.get("type", ""), reference_image=sheet_abs_path)
+                    
+                    portrait_ext = get_extension_for_mime_type(portrait_info.get("response", {}).get("output", {}).get("mime_type"))
+                    portrait_filename = f"portrait{portrait_ext}"
+                    (char_asset_dir / portrait_filename).write_bytes(portrait_data)
+                    character_model.assets.portrait = f"assets/characters/{char_id}/{portrait_filename}"
+                except Exception as e:
+                    print(f"    ...Error generating assets for character {char_key}: {e}")
         
         character_models[char_id] = character_model
 
@@ -198,21 +208,29 @@ async def convert_story_to_project(story_id: str, story_data: dict, continuity: 
     
     for loc_id, scene_desc in unique_scene_descs.items():
         location_model = Location(id=loc_id, name=scene_desc[:100], description=scene_desc)
-        print(f"  - Generating assets for location: {scene_desc[:50]}...")
-        try:
-            image_data, image_info = await loc_generator.generate_reference(
-                location=location_model, style=story_data.get("type", ""))
-            
-            loc_asset_dir = assets_abs_path / "locations" / loc_id
-            loc_asset_dir.mkdir(parents=True, exist_ok=True)
-            
-            image_ext = get_extension_for_mime_type(image_info.get("response", {}).get("output", {}).get("mime_type"))
-            image_filename = f"reference{image_ext}"
-            (loc_asset_dir / image_filename).write_bytes(image_data)
-            location_model.assets = LocationAssets(reference=f"assets/locations/{loc_id}/{image_filename}")
-        except Exception as e:
-            print(f"    ...Error generating assets for location {loc_id}: {e}")
-            location_model.assets = LocationAssets()
+        
+        loc_asset_dir = assets_abs_path / "locations" / loc_id
+        loc_asset_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Check for existing assets to reuse
+        existing_ref = next(loc_asset_dir.glob("reference.*"), None)
+
+        if existing_ref:
+            print(f"  - Reusing existing assets for location: {scene_desc[:50]}...")
+            location_model.assets = LocationAssets(reference=f"assets/locations/{loc_id}/{existing_ref.name}")
+        else:
+            print(f"  - Generating assets for location: {scene_desc[:50]}...")
+            try:
+                image_data, image_info = await loc_generator.generate_reference(
+                    location=location_model, style=story_data.get("type", ""))
+                
+                image_ext = get_extension_for_mime_type(image_info.get("response", {}).get("output", {}).get("mime_type"))
+                image_filename = f"reference{image_ext}"
+                (loc_asset_dir / image_filename).write_bytes(image_data)
+                location_model.assets = LocationAssets(reference=f"assets/locations/{loc_id}/{image_filename}")
+            except Exception as e:
+                print(f"    ...Error generating assets for location {loc_id}: {e}")
+                location_model.assets = LocationAssets()
         
         location_models[loc_id] = location_model
 
@@ -284,9 +302,9 @@ async def convert_story_to_project(story_id: str, story_data: dict, continuity: 
             location_references=loc_refs,
             output_dir=assets_abs_path,
             style=project.style,
-            overwrite=True
+            overwrite=False
         )
-        print(f"    ...Panel images generated for story {story_id}")
+        print(f"    ...Panel images generated (or reused) for story {story_id}")
     except Exception as e:
         print(f"    ...Error generating panel images for story {story_id}: {e}")
 
@@ -311,7 +329,7 @@ class DreamWrightAdapter:
         self.dreamwright_path = dreamwright_path
         self.dataset = StoryDataset(dataset_path)
 
-    async def convert(self, story_list: list, language: str, continuity: bool = True) -> dict:
+    async def convert(self, story_list: list, language: str, continuity: bool = True, existing_manifest: dict = None) -> dict:
         """
         Convert multiple stories to DreamWright projects.
 
@@ -319,16 +337,21 @@ class DreamWrightAdapter:
             story_list: List of story IDs to convert
             language: "en" or "ch"
             continuity: Whether to enable panel continuity
+            existing_manifest: Optional dictionary of existing manifest to append to
 
         Returns:
             Manifest dict with converted project info
         """
-        manifest = {
-            "created_at": datetime.now().isoformat(),
-            "language": language,
-            "source": "ViStory",
-            "projects": {}
-        }
+        if existing_manifest:
+            manifest = existing_manifest
+            manifest["updated_at"] = datetime.now().isoformat()
+        else:
+            manifest = {
+                "created_at": datetime.now().isoformat(),
+                "language": language,
+                "source": "ViStory",
+                "projects": {}
+            }
 
         try:
             stories_data = self.dataset.load_stories(story_list, language)
@@ -437,20 +460,32 @@ async def main():
 
     # Get story list
     if args.stories:
-        story_list = args.stories
+        story_list = [s.zfill(2) for s in args.stories]
     else:
         story_list = adapter.dataset.get_story_name_list(split=args.split)
 
     print(f"Found {len(story_list)} stories: {story_list[:5]}{'...' if len(story_list) > 5 else ''}")
 
-    # Convert stories
-    manifest = await adapter.convert(story_list, args.language, args.continuity)
-
-    # Save manifest
+    # Determine manifest path
     manifest_path = os.path.join(
         data_path, "dataset_processed", "dreamwright",
         f"ViStory_{args.language}", "manifest.json"
     )
+
+    # Load existing manifest if available
+    existing_manifest = None
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, 'r', encoding='utf-8') as f:
+                existing_manifest = json.load(f)
+            print(f"Loaded existing manifest from: {manifest_path}")
+        except Exception as e:
+            print(f"Warning: Could not read existing manifest: {e}")
+
+    # Convert stories
+    manifest = await adapter.convert(story_list, args.language, args.continuity, existing_manifest=existing_manifest)
+
+    # Save manifest
     os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
 
     with open(manifest_path, 'w', encoding='utf-8') as f:
